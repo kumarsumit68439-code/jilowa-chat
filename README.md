@@ -1,29 +1,47 @@
 # Jilowa Chat
 
-Discord / Telegram style **real-time** chat app connected to **AI Gateway Hub**.
+Discord-style servers/channels + Telegram-style BotFather, connected to **AI Gateway Hub**.
 
-- Same Supabase project → shared login sessions (when configured)
-- Real-time messages via Supabase Realtime
-- AI channels call your Gateway (`POST /api/v1/chat/completions`)
-- Servers, channels, DMs-style layout
+## Fix MIDDLEWARE_INVOCATION_FAILED
 
-## Setup
+That error means env vars were missing on Vercel. Set:
 
-1. Copy `.env.example` → `.env.local`
-2. Use the **same** `NEXT_PUBLIC_SUPABASE_URL` and anon key as AI Gateway Hub
-3. Set `NEXT_PUBLIC_GATEWAY_URL` to your gateway (e.g. `https://ub-mauve.vercel.app`)
-4. Run SQL in Supabase (see `supabase/schema.sql`)
-5. `npm install && npm run dev`
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_GATEWAY_URL=https://ub-mauve.vercel.app
+```
 
-## Deploy
+Optional for bot API posting:
 
-Connect this repo to Vercel. Add the same env vars. Add your chat domain to Supabase Auth redirect URLs if you enable Google login later.
+```
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Redeploy. If env is still missing, `/setup` explains the steps (middleware no longer hard-crashes).
+
+## Database
+
+Run `supabase/schema.sql` in the Supabase SQL editor.
+
+## Features (this platform)
+
+| Area | Status |
+|------|--------|
+| Servers / channels / live messages | Yes |
+| AI channels → AI Gateway | Yes |
+| BotFather + real platform bot tokens | Yes |
+| Bot HTTP API sendMessage / getMe | Yes |
+| Friends page | Basic |
+| Official Telegram/Discord cloud bots | No — use their developer portals |
+
+Official Telegram BotFather and Discord Developer Portal create bots on *their* networks. We create bots that work **inside Jilowa Chat** with tokens for `/api/bot/...`.
 
 ## Pages
 
-| Path | Purpose |
-|------|---------|
-| `/` | Redirect to app or login |
-| `/login` | Email login (Supabase) |
-| `/app` | Main chat (servers + channels + messages) |
-| `/settings` | Gateway key + profile |
+- `/login` — auth
+- `/app` — main Discord-like UI
+- `/botfather` — create bots + tokens
+- `/friends` — friends list
+- `/settings` — gateway key
+- `/setup` — env missing help

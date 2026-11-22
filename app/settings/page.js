@@ -25,23 +25,25 @@ export default function Settings() {
 
   return (
     <div style={{ maxWidth: 560, margin: '40px auto', padding: 20 }}>
-      <Link href="/app" style={{ color: 'var(--mute)' }}>← Back to chat</Link>
-      <h1 style={{ marginTop: 16 }}>Settings</h1>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <Link href="/app">← Chat</Link>
+        <Link href="/botfather">BotFather</Link>
+        <Link href="/friends">Friends</Link>
+      </div>
+      <h1>Settings</h1>
 
       <section style={box}>
         <h3 style={{ marginTop: 0 }}>Account</h3>
-        <p style={{ color: 'var(--mute)', margin: 0 }}>{user?.email || '…'}</p>
-        <p style={{ fontSize: 13, color: 'var(--mute)' }}>
-          Same Supabase project as AI Gateway Hub — one account for both sites when env matches.
-        </p>
+        <p style={{ color: '#949ba4', margin: 0 }}>{user?.email || '…'}</p>
+        <p style={{ fontSize: 12, color: '#949ba4' }}>User ID: <code>{user?.id || '…'}</code></p>
       </section>
 
       <section style={box}>
-        <h3 style={{ marginTop: 0 }}>AI Gateway connection</h3>
-        <p style={{ fontSize: 13, color: 'var(--mute)' }}>
-          Gateway URL: <code>{gatewayUrl || '(set NEXT_PUBLIC_GATEWAY_URL)'}</code>
+        <h3 style={{ marginTop: 0 }}>AI Gateway</h3>
+        <p style={{ fontSize: 13, color: '#949ba4' }}>
+          URL: <code>{gatewayUrl || '(set NEXT_PUBLIC_GATEWAY_URL)'}</code>
         </p>
-        <label style={{ fontSize: 12, color: 'var(--mute)' }}>Your gateway API key (sk-gw-…)</label>
+        <label style={{ fontSize: 12, color: '#949ba4' }}>Gateway API key (sk-gw-…)</label>
         <input
           style={input}
           type="password"
@@ -49,19 +51,16 @@ export default function Settings() {
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
-        <p style={{ fontSize: 12, color: 'var(--mute)' }}>
-          Create a key on the Gateway site → Gateway keys, then paste it here. AI channels use this key.
-        </p>
         <button type="button" style={btn} onClick={save}>
           {saved ? 'Saved ✓' : 'Save key'}
         </button>
       </section>
 
       <section style={box}>
-        <h3 style={{ marginTop: 0 }}>Realtime</h3>
-        <p style={{ fontSize: 13, color: 'var(--mute)', margin: 0 }}>
-          Messages use Supabase Realtime on table <code>chat_messages</code>. Run{' '}
-          <code>supabase/schema.sql</code> once in the Supabase SQL editor.
+        <h3 style={{ marginTop: 0 }}>Bots</h3>
+        <p style={{ fontSize: 13, color: '#949ba4' }}>
+          Create platform bots and tokens at <Link href="/botfather">BotFather</Link>.
+          API: <code>POST /api/bot/&#123;token&#125;/sendMessage</code>
         </p>
       </section>
     </div>
@@ -72,8 +71,8 @@ const box = {
   marginTop: 20,
   padding: 20,
   borderRadius: 12,
-  background: 'var(--bg3)',
-  border: '1px solid var(--line)',
+  background: '#2b2d31',
+  border: '1px solid rgba(255,255,255,.06)',
 };
 const input = {
   width: '100%',
@@ -81,15 +80,15 @@ const input = {
   marginBottom: 8,
   padding: '10px 12px',
   borderRadius: 8,
-  border: '1px solid var(--line)',
-  background: 'var(--bg)',
-  color: 'var(--text)',
+  border: '1px solid rgba(255,255,255,.08)',
+  background: '#1e1f22',
+  color: '#f2f3f5',
 };
 const btn = {
   padding: '10px 18px',
   border: 0,
   borderRadius: 8,
-  background: 'var(--accent)',
+  background: '#5865f2',
   color: '#fff',
   fontWeight: 600,
 };

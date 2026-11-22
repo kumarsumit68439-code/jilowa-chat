@@ -16,9 +16,7 @@ export default function ChatApp() {
   const [sending, setSending] = useState(false);
   const [gatewayKey, setGatewayKey] = useState('');
   const bottomRef = useRef(null);
-  const channelRef = useRef(null);
 
-  // Auth + load key from localStorage
   useEffect(() => {
     sb().auth.getUser().then(({ data }) => setUser(data?.user || null));
     const { data: sub } = sb().auth.onAuthStateChange((_e, session) => {
@@ -30,7 +28,6 @@ export default function ChatApp() {
     return () => sub?.subscription?.unsubscribe();
   }, []);
 
-  // Load servers
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -39,7 +36,6 @@ export default function ChatApp() {
         setServers(data);
         setActiveServer(data[0]);
       } else {
-        // Bootstrap default server + channels for first user
         const { data: s } = await sb()
           .from('chat_servers')
           .insert({ name: 'Jilowa HQ', icon: '⚡', owner_id: user.id })
@@ -47,12 +43,11 @@ export default function ChatApp() {
           .single();
         if (s) {
           await sb().from('chat_members').insert({ server_id: s.id, user_id: user.id, role: 'owner' });
-          const ch = [
+          await sb().from('chat_channels').insert([
             { server_id: s.id, name: 'general', topic: 'General chat' },
-            { server_id: s.id, name: 'ai-assistant', topic: 'Talk to AI via Gateway', is_ai: true },
+            { server_id: s.id, name: 'ai-assistant', topic: 'AI via Gateway', is_ai: true },
             { server_id: s.id, name: 'announcements', topic: 'News' },
-          ];
-          await sb().from('chat_channels').insert(ch);
+          ]);
           setServers([s]);
           setActiveServer(s);
         }
@@ -60,7 +55,6 @@ export default function ChatApp() {
     })();
   }, [user]);
 
-  // Load channels when server changes
   useEffect(() => {
     if (!activeServer) return;
     (async () => {
@@ -75,14 +69,11 @@ export default function ChatApp() {
     })();
   }, [activeServer]);
 
-  // Load messages + realtime subscribe
   useEffect(() => {
     if (!activeChannel) {
       setMessages([]);
       return;
     }
-    channelRef.current = activeChannel;
-
     (async () => {
       const { data } = await sb()
         .from('chat_messages')
@@ -127,10 +118,7 @@ export default function ChatApp() {
     setSending(true);
     setText('');
 
-    const author =
-      user.user_metadata?.full_name ||
-      user.email?.split('@')[0] ||
-      'User';
+    const author = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
 
     const { error } = await sb().from('chat_messages').insert({
       channel_id: activeChannel.id,
@@ -146,15 +134,13 @@ export default function ChatApp() {
       return;
     }
 
-    // AI channel → call Gateway and post reply
     if (activeChannel.is_ai) {
       try {
         const key = gatewayKey || localStorage.getItem('jilowa_gateway_key');
         const history = [
           {
             role: 'system',
-            content:
-              'You are the AI assistant inside Jilowa Chat, connected to AI Gateway Hub. Be helpful and concise.',
+            content: 'You are the AI assistant in Jilowa Chat, powered by AI Gateway Hub.',
           },
           ...messages.slice(-12).map((m) => ({
             role: m.is_ai ? 'assistant' : 'user',
@@ -170,7 +156,7 @@ export default function ChatApp() {
         const reply =
           json?.choices?.[0]?.message?.content ||
           json?.choices?.[0]?.text ||
-          '(empty response)';
+          '(empty)';
         await sb().from('chat_messages').insert({
           channel_id: activeChannel.id,
           user_id: null,
@@ -183,7 +169,7 @@ export default function ChatApp() {
           channel_id: activeChannel.id,
           user_id: null,
           author_name: 'System',
-          content: `AI error: ${e.message}. Set your sk-gw- key in Settings.`,
+          content: `AI error: ${e.message}. Set sk-gw- key in Settings.`,
           is_ai: true,
         });
       }
@@ -193,9 +179,9 @@ export default function ChatApp() {
   }, [text, activeChannel, user, sending, gatewayKey, messages]);
 
   async function createChannel() {
-    const name = prompt('Channel name (no spaces preferred):');
+    const name = prompt('Channel name:');
     if (!name || !activeServer) return;
-    const isAi = confirm('Make this an AI channel? (messages call AI Gateway)');
+    const isAi = confirm('AI channel? (uses AI Gateway)');
     const { data, error } = await sb()
       .from('chat_channels')
       .insert({
@@ -210,6 +196,24 @@ export default function ChatApp() {
     else setChannels((c) => [...c, data]);
   }
 
+  async function createServer() {
+    const name = prompt('Server name:');
+    if (!name || !user) return;
+    const { data: s, error } = await sb()
+      .from('chat_servers')
+      .insert({ name, icon: '🎮', owner_id: user.id })
+      .select()
+      .single();
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await sb().from('chat_members').insert({ server_id: s.id, user_id: user.id, role: 'owner' });
+    await sb().from('chat_channels').insert({ server_id: s.id, name: 'general' });
+    setServers((x) => [...x, s]);
+    setActiveServer(s);
+  }
+
   async function logout() {
     await sb().auth.signOut();
     window.location.href = '/login';
@@ -217,7 +221,7 @@ export default function ChatApp() {
 
   if (!user) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', color: 'var(--mute)' }}>
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', color: '#949ba4' }}>
         Loading…
       </div>
     );
@@ -225,29 +229,33 @@ export default function ChatApp() {
 
   return (
     <div style={S.shell}>
-      {/* Server rail */}
       <nav style={S.rail}>
         {servers.map((s) => (
           <button
             key={s.id}
             type="button"
             title={s.name}
-            style={{
-              ...S.serverBtn,
-              ...(activeServer?.id === s.id ? S.serverBtnOn : {}),
-            }}
+            style={{ ...S.serverBtn, ...(activeServer?.id === s.id ? S.serverBtnOn : {}) }}
             onClick={() => setActiveServer(s)}
           >
             {s.icon || s.name[0]}
           </button>
         ))}
+        <button type="button" style={S.serverBtn} onClick={createServer} title="Add server">
+          +
+        </button>
         <div style={S.railSep} />
+        <Link href="/botfather" style={S.serverBtn} title="BotFather">
+          🤖
+        </Link>
+        <Link href="/friends" style={S.serverBtn} title="Friends">
+          👥
+        </Link>
         <Link href="/settings" style={S.serverBtn} title="Settings">
           ⚙️
         </Link>
       </nav>
 
-      {/* Channel list */}
       <aside style={S.sidebar}>
         <div style={S.sidebarHead}>
           <strong>{activeServer?.name || 'Server'}</strong>
@@ -255,7 +263,7 @@ export default function ChatApp() {
         <div style={S.channelList}>
           <div style={S.cat}>
             TEXT CHANNELS
-            <button type="button" style={S.plus} onClick={createChannel} title="New channel">
+            <button type="button" style={S.plus} onClick={createChannel}>
               +
             </button>
           </div>
@@ -263,10 +271,7 @@ export default function ChatApp() {
             <button
               key={ch.id}
               type="button"
-              style={{
-                ...S.channel,
-                ...(activeChannel?.id === ch.id ? S.channelOn : {}),
-              }}
+              style={{ ...S.channel, ...(activeChannel?.id === ch.id ? S.channelOn : {}) }}
               onClick={() => setActiveChannel(ch)}
             >
               <span style={{ opacity: 0.7 }}>{ch.is_ai ? '✦' : '#'}</span> {ch.name}
@@ -276,39 +281,24 @@ export default function ChatApp() {
         <div style={S.userBar}>
           <div style={S.avatar}>{(user.email || 'U')[0].toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {user.email?.split('@')[0]}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--mute)' }}>Online</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{user.email?.split('@')[0]}</div>
+            <div style={{ fontSize: 11, color: '#949ba4' }}>Online</div>
           </div>
-          <button type="button" style={S.iconBtn} onClick={logout} title="Log out">
+          <button type="button" style={S.iconBtn} onClick={logout}>
             ⎋
           </button>
         </div>
       </aside>
 
-      {/* Main chat */}
       <main style={S.main}>
         <header style={S.top}>
           <span style={{ fontWeight: 700 }}>
-            {activeChannel ? (activeChannel.is_ai ? '✦' : '#') : ''} {activeChannel?.name || 'Select a channel'}
+            {activeChannel ? (activeChannel.is_ai ? '✦' : '#') : ''} {activeChannel?.name || 'Select channel'}
           </span>
-          {activeChannel?.topic && (
-            <span style={{ color: 'var(--mute)', fontSize: 13, marginLeft: 12 }}>{activeChannel.topic}</span>
-          )}
-          {activeChannel?.is_ai && (
-            <span style={S.badge}>AI Gateway</span>
-          )}
+          {activeChannel?.is_ai && <span style={S.badge}>AI Gateway</span>}
         </header>
 
         <div style={S.messages}>
-          {messages.length === 0 && (
-            <div style={{ color: 'var(--mute)', padding: 24 }}>
-              {activeChannel?.is_ai
-                ? 'This is an AI channel. Messages are sent to AI Gateway Hub and the reply appears here in real time.'
-                : 'No messages yet. Say hello!'}
-            </div>
-          )}
           {messages.map((m) => (
             <div key={m.id} style={S.msg}>
               <div
@@ -316,15 +306,15 @@ export default function ChatApp() {
                   ...S.msgAvatar,
                   background: m.is_ai
                     ? 'linear-gradient(135deg,#7c5cff,#22d3ee)'
-                    : 'var(--accent)',
+                    : '#5865f2',
                 }}
               >
                 {m.is_ai ? 'AI' : (m.author_name || '?')[0].toUpperCase()}
               </div>
               <div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <strong style={{ fontSize: 15 }}>{m.author_name}</strong>
-                  <time style={{ fontSize: 11, color: 'var(--mute)' }}>
+                  <strong>{m.author_name}</strong>
+                  <time style={{ fontSize: 11, color: '#949ba4' }}>
                     {m.created_at ? new Date(m.created_at).toLocaleString() : ''}
                   </time>
                 </div>
@@ -339,11 +329,7 @@ export default function ChatApp() {
           <div style={S.composer}>
             <input
               style={S.composerInput}
-              placeholder={
-                activeChannel
-                  ? `Message ${activeChannel.is_ai ? 'AI · ' : '#'}${activeChannel.name}`
-                  : 'Select a channel'
-              }
+              placeholder={activeChannel ? `Message #${activeChannel.name}` : 'Select a channel'}
               value={text}
               disabled={!activeChannel || sending}
               onChange={(e) => setText(e.target.value)}
@@ -355,7 +341,7 @@ export default function ChatApp() {
               }}
             />
             <button type="button" style={S.sendBtn} disabled={!text.trim() || sending} onClick={send}>
-              {sending ? '…' : 'Send'}
+              Send
             </button>
           </div>
         </div>
@@ -365,10 +351,10 @@ export default function ChatApp() {
 }
 
 const S = {
-  shell: { display: 'flex', height: '100vh', background: 'var(--bg)' },
+  shell: { display: 'flex', height: '100vh', background: '#1e1f22' },
   rail: {
     width: 72,
-    background: 'var(--bg4)',
+    background: '#1a1b1e',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -380,49 +366,30 @@ const S = {
     height: 48,
     borderRadius: 16,
     border: 0,
-    background: 'var(--bg2)',
-    color: 'var(--text)',
-    fontSize: 22,
+    background: '#2b2d31',
+    color: '#f2f3f5',
+    fontSize: 20,
     display: 'grid',
     placeItems: 'center',
-    transition: 'border-radius .15s, background .15s',
     textDecoration: 'none',
+    cursor: 'pointer',
   },
-  serverBtnOn: {
-    borderRadius: 14,
-    background: 'var(--accent)',
-  },
-  railSep: { width: 32, height: 2, background: 'var(--line)', margin: '4px 0' },
-  sidebar: {
-    width: 240,
-    background: 'var(--bg2)',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  sidebarHead: {
-    padding: '16px',
-    borderBottom: '1px solid var(--line)',
-    fontSize: 15,
-  },
-  channelList: { flex: 1, overflowY: 'auto', padding: '8px' },
+  serverBtnOn: { borderRadius: 14, background: '#5865f2' },
+  railSep: { width: 32, height: 2, background: 'rgba(255,255,255,.06)', margin: '4px 0' },
+  sidebar: { width: 240, background: '#2b2d31', display: 'flex', flexDirection: 'column' },
+  sidebarHead: { padding: 16, borderBottom: '1px solid rgba(255,255,255,.06)', fontSize: 15 },
+  channelList: { flex: 1, overflowY: 'auto', padding: 8 },
   cat: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     fontSize: 11,
     letterSpacing: '0.06em',
-    color: 'var(--mute)',
+    color: '#949ba4',
     padding: '8px 8px 4px',
     fontWeight: 700,
   },
-  plus: {
-    border: 0,
-    background: 'transparent',
-    color: 'var(--mute)',
-    fontSize: 18,
-    lineHeight: 1,
-    padding: 0,
-  },
+  plus: { border: 0, background: 'transparent', color: '#949ba4', fontSize: 18, cursor: 'pointer' },
   channel: {
     display: 'flex',
     alignItems: 'center',
@@ -433,45 +400,30 @@ const S = {
     border: 0,
     borderRadius: 4,
     background: 'transparent',
-    color: 'var(--mute)',
+    color: '#949ba4',
     fontSize: 15,
+    cursor: 'pointer',
   },
-  channelOn: {
-    background: 'rgba(255,255,255,.06)',
-    color: 'var(--text)',
-  },
-  userBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: 8,
-    background: 'var(--bg4)',
-  },
+  channelOn: { background: 'rgba(255,255,255,.06)', color: '#f2f3f5' },
+  userBar: { display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: '#1a1b1e' },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 50,
-    background: 'var(--accent)',
+    background: '#5865f2',
     display: 'grid',
     placeItems: 'center',
     fontWeight: 700,
     fontSize: 13,
   },
-  iconBtn: {
-    border: 0,
-    background: 'transparent',
-    color: 'var(--mute)',
-    fontSize: 16,
-    padding: 6,
-  },
-  main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--bg3)' },
+  iconBtn: { border: 0, background: 'transparent', color: '#949ba4', fontSize: 16, cursor: 'pointer' },
+  main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#313338' },
   top: {
     height: 48,
     display: 'flex',
     alignItems: 'center',
     padding: '0 16px',
-    borderBottom: '1px solid var(--line)',
-    boxShadow: '0 1px 0 rgba(0,0,0,.2)',
+    borderBottom: '1px solid rgba(255,255,255,.06)',
   },
   badge: {
     marginLeft: 'auto',
@@ -495,27 +447,22 @@ const S = {
     color: '#fff',
   },
   composerWrap: { padding: '0 16px 24px' },
-  composer: {
-    display: 'flex',
-    gap: 8,
-    background: 'var(--bg2)',
-    borderRadius: 8,
-    padding: 8,
-  },
+  composer: { display: 'flex', gap: 8, background: '#2b2d31', borderRadius: 8, padding: 8 },
   composerInput: {
     flex: 1,
     border: 0,
     background: 'transparent',
-    color: 'var(--text)',
+    color: '#f2f3f5',
     outline: 'none',
-    padding: '8px',
+    padding: 8,
   },
   sendBtn: {
     border: 0,
     borderRadius: 6,
     padding: '8px 16px',
-    background: 'var(--accent)',
+    background: '#5865f2',
     color: '#fff',
     fontWeight: 600,
+    cursor: 'pointer',
   },
 };
