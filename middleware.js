@@ -4,22 +4,17 @@ import { createServerClient } from '@supabase/ssr';
 export async function middleware(req) {
   const path = req.nextUrl.pathname;
 
-  // Public paths — never crash the edge
-  const publicPaths = ['/login', '/setup'];
   const isPublic =
-    publicPaths.includes(path) ||
+    path === '/login' ||
     path.startsWith('/auth') ||
-    path.startsWith('/api/bot');
+    path.startsWith('/api/');
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Missing env on Vercel → show setup instead of 500 MIDDLEWARE_INVOCATION_FAILED
+  // No env → do not show setup page; allow request through (login still usable once env is added)
   if (!url || !key) {
-    if (path === '/setup') return NextResponse.next();
-    const u = req.nextUrl.clone();
-    u.pathname = '/setup';
-    return NextResponse.redirect(u);
+    return NextResponse.next();
   }
 
   try {
@@ -55,20 +50,15 @@ export async function middleware(req) {
       return NextResponse.redirect(u);
     }
 
-    if (path === '/') {
+    if (path === '/' || path === '/setup') {
       const u = req.nextUrl.clone();
       u.pathname = '/app';
       return NextResponse.redirect(u);
     }
 
     return res;
-  } catch (err) {
-    // Never 500 the whole site from middleware
-    console.error('middleware error', err);
-    if (isPublic) return NextResponse.next();
-    const u = req.nextUrl.clone();
-    u.pathname = '/login';
-    return NextResponse.redirect(u);
+  } catch {
+    return NextResponse.next();
   }
 }
 
