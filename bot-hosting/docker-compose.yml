@@ -1,0 +1,26 @@
+# Run on any VPS: docker compose up -d --build
+services:
+  bot-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      API_BASE: ${API_BASE:-https://your-jilowa-chat.vercel.app}
+      CHAT_ID: ${CHAT_ID:-}
+    # Uncomment to expose webhook server instead of bot.js:
+    # command: ["npm", "run", "webhook"]
+    # ports:
+    #   - "8080:8080"
+
+  # Optional second service — Python bot
+  # bot-python:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.python
+  #   restart: unless-stopped
+  #   environment:
+  #     BOT_TOKEN: ${BOT_TOKEN}
+  #     API_BASE: ${API_BASE}
+  #     CHAT_ID: ${CHAT_ID}
