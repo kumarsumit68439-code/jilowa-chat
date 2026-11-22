@@ -245,6 +245,12 @@ export default function ChatApp() {
           +
         </button>
         <div style={S.railSep} />
+        <Link href="/discover" style={S.serverBtn} title="Discover">
+          🧭
+        </Link>
+        <Link href="/nitro" style={S.serverBtn} title="Premium">
+          💎
+        </Link>
         <Link href="/botfather" style={S.serverBtn} title="BotFather">
           🤖
         </Link>
@@ -373,6 +379,7 @@ const S = {
     placeItems: 'center',
     textDecoration: 'none',
     cursor: 'pointer',
+    transition: 'border-radius .15s, background .15s, transform .15s',
   },
   serverBtnOn: { borderRadius: 14, background: '#5865f2' },
   railSep: { width: 32, height: 2, background: 'rgba(255,255,255,.06)', margin: '4px 0' },
