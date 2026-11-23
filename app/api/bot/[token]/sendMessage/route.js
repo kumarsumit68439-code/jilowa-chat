@@ -1,20 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Bot API (platform bots created via BotFather)
-// POST /api/bot/{token}/sendMessage  { "chat_id": "channel-uuid", "text": "hello" }
+function adminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 export async function POST(req, { params }) {
-  const token = params.token;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !(service || anon)) {
+  const token = decodeURIComponent(params.token || '');
+  const admin = adminClient();
+  if (!admin) {
     return Response.json({ ok: false, error: 'Server not configured' }, { status: 500 });
   }
-
-  // Prefer service role so bots can post; fall back to anon (needs RLS insert)
-  const admin = createClient(url, service || anon);
 
   const { data: bot, error: botErr } = await admin
     .from('chat_bots')
@@ -24,7 +23,7 @@ export async function POST(req, { params }) {
     .maybeSingle();
 
   if (botErr || !bot) {
-    return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    return Response.json({ ok: false, error: 'Unauthorized — invalid bot token' }, { status: 401 });
   }
 
   let body;
@@ -46,7 +45,7 @@ export async function POST(req, { params }) {
       channel_id: chatId,
       user_id: bot.owner_id,
       author_name: bot.name,
-      content: String(text),
+      content: String(text).slice(0, 4000),
       is_ai: false,
     })
     .select()
@@ -54,6 +53,15 @@ export async function POST(req, { params }) {
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 400 });
+  }
+
+  // Optional webhook notify (fire-and-forget)
+  if (bot.webhook_url) {
+    fetch(bot.webhook_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'message_sent', bot_id: bot.id, message: msg }),
+    }).catch(() => {});
   }
 
   return Response.json({ ok: true, result: msg });

@@ -13,45 +13,83 @@
   --line: rgba(255, 255, 255, 0.06);
   --radius: 8px;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+
+html {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
-  font: 15px/1.45 "gg sans", "Noto Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  margin: 0;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
   background: var(--bg);
   color: var(--text);
-  overflow: hidden;
+  /* stop rubber-band / page drag on mobile */
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
+
 a { color: #00a8fc; text-decoration: none; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+/* inputs: no auto-zoom on iOS (font-size >= 16px) */
+input, textarea, select {
+  font-size: 16px;
+  max-width: 100%;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb {
   background: #1a1b1e;
   border-radius: 4px;
 }
 
+/* scroll only inside panels */
+.scroll-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.no-scroll {
+  overflow: hidden;
+}
+
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(88, 101, 242, 0.45); }
-  50% { box-shadow: 0 0 0 8px rgba(88, 101, 242, 0); }
-}
-@keyframes floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(88, 101, 242, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(88, 101, 242, 0); }
 }
 @keyframes shimmer {
   0% { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
 }
 
-.fade-in { animation: fadeUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.fade-in { animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
 .premium-border {
   background: var(--nitro);
   background-size: 200% 200%;

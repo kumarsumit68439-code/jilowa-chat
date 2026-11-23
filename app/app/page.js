@@ -15,6 +15,7 @@ export default function ChatApp() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [gatewayKey, setGatewayKey] = useState('');
+  const [mobilePanel, setMobilePanel] = useState('chat'); // rail | channels | chat
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -31,7 +32,11 @@ export default function ChatApp() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await sb().from('chat_servers').select('*').order('created_at');
+      const { data, error } = await sb().from('chat_servers').select('*').order('created_at');
+      if (error) {
+        console.error(error);
+        return;
+      }
       if (data?.length) {
         setServers(data);
         setActiveServer(data[0]);
@@ -219,24 +224,41 @@ export default function ChatApp() {
     window.location.href = '/login';
   }
 
+  function pickChannel(ch) {
+    setActiveChannel(ch);
+    setMobilePanel('chat');
+  }
+
   if (!user) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', color: '#949ba4' }}>
+      <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--mute)' }}>
         Loading…
       </div>
     );
   }
 
   return (
-    <div style={S.shell}>
-      <nav style={S.rail}>
+    <div className="no-scroll" style={S.shell}>
+      {/* Server rail */}
+      <nav
+        style={{
+          ...S.rail,
+          ...(typeof window !== 'undefined' && window.innerWidth < 768 && mobilePanel !== 'rail'
+            ? { display: 'none' }
+            : {}),
+        }}
+        className="app-rail"
+      >
         {servers.map((s) => (
           <button
             key={s.id}
             type="button"
             title={s.name}
             style={{ ...S.serverBtn, ...(activeServer?.id === s.id ? S.serverBtnOn : {}) }}
-            onClick={() => setActiveServer(s)}
+            onClick={() => {
+              setActiveServer(s);
+              setMobilePanel('channels');
+            }}
           >
             {s.icon || s.name[0]}
           </button>
@@ -262,11 +284,15 @@ export default function ChatApp() {
         </Link>
       </nav>
 
-      <aside style={S.sidebar}>
+      {/* Channels */}
+      <aside style={S.sidebar} className="app-sidebar">
         <div style={S.sidebarHead}>
-          <strong>{activeServer?.name || 'Server'}</strong>
+          <button type="button" style={S.mobileOnly} onClick={() => setMobilePanel('rail')}>
+            ☰
+          </button>
+          <strong style={{ flex: 1 }}>{activeServer?.name || 'Server'}</strong>
         </div>
-        <div style={S.channelList}>
+        <div className="scroll-y" style={S.channelList}>
           <div style={S.cat}>
             TEXT CHANNELS
             <button type="button" style={S.plus} onClick={createChannel}>
@@ -278,7 +304,7 @@ export default function ChatApp() {
               key={ch.id}
               type="button"
               style={{ ...S.channel, ...(activeChannel?.id === ch.id ? S.channelOn : {}) }}
-              onClick={() => setActiveChannel(ch)}
+              onClick={() => pickChannel(ch)}
             >
               <span style={{ opacity: 0.7 }}>{ch.is_ai ? '✦' : '#'}</span> {ch.name}
             </button>
@@ -287,8 +313,10 @@ export default function ChatApp() {
         <div style={S.userBar}>
           <div style={S.avatar}>{(user.email || 'U')[0].toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{user.email?.split('@')[0]}</div>
-            <div style={{ fontSize: 11, color: '#949ba4' }}>Online</div>
+            <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.email?.split('@')[0]}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--mute)' }}>Online</div>
           </div>
           <button type="button" style={S.iconBtn} onClick={logout}>
             ⎋
@@ -296,15 +324,20 @@ export default function ChatApp() {
         </div>
       </aside>
 
-      <main style={S.main}>
+      {/* Chat */}
+      <main style={S.main} className="app-main">
         <header style={S.top}>
+          <button type="button" style={S.mobileOnly} onClick={() => setMobilePanel('channels')}>
+            ←
+          </button>
           <span style={{ fontWeight: 700 }}>
-            {activeChannel ? (activeChannel.is_ai ? '✦' : '#') : ''} {activeChannel?.name || 'Select channel'}
+            {activeChannel ? (activeChannel.is_ai ? '✦' : '#') : ''}{' '}
+            {activeChannel?.name || 'Select channel'}
           </span>
           {activeChannel?.is_ai && <span style={S.badge}>AI Gateway</span>}
         </header>
 
-        <div style={S.messages}>
+        <div className="scroll-y" style={S.messages}>
           {messages.map((m) => (
             <div key={m.id} style={S.msg}>
               <div
@@ -317,10 +350,10 @@ export default function ChatApp() {
               >
                 {m.is_ai ? 'AI' : (m.author_name || '?')[0].toUpperCase()}
               </div>
-              <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
                   <strong>{m.author_name}</strong>
-                  <time style={{ fontSize: 11, color: '#949ba4' }}>
+                  <time style={{ fontSize: 11, color: 'var(--mute)' }}>
                     {m.created_at ? new Date(m.created_at).toLocaleString() : ''}
                   </time>
                 </div>
@@ -352,85 +385,162 @@ export default function ChatApp() {
           </div>
         </div>
       </main>
+
+      <style jsx global>{`
+        .app-rail, .app-sidebar, .app-main { min-height: 0; }
+        @media (max-width: 767px) {
+          .app-rail {
+            display: ${mobilePanel === 'rail' ? 'flex' : 'none'} !important;
+            width: 72px !important;
+          }
+          .app-sidebar {
+            display: ${mobilePanel === 'channels' || mobilePanel === 'rail' ? 'flex' : 'none'} !important;
+            width: ${mobilePanel === 'rail' ? '0' : '100%'} !important;
+            flex: ${mobilePanel === 'channels' ? '1' : 'none'} !important;
+          }
+          .app-main {
+            display: ${mobilePanel === 'chat' ? 'flex' : 'none'} !important;
+            flex: 1 !important;
+          }
+        }
+        @media (min-width: 768px) {
+          .mobile-only-btn { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
 
 const S = {
-  shell: { display: 'flex', height: '100vh', background: '#1e1f22' },
+  shell: {
+    display: 'flex',
+    height: '100%',
+    height: '100dvh',
+    width: '100%',
+    maxWidth: '100vw',
+    background: 'var(--bg)',
+    overflow: 'hidden',
+    paddingTop: 'var(--sat)',
+    paddingBottom: 'var(--sab)',
+  },
   rail: {
     width: 72,
-    background: '#1a1b1e',
+    flex: 'none',
+    background: 'var(--bg4)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     padding: '12px 0',
     gap: 8,
+    overflowY: 'auto',
+    overflowX: 'hidden',
   },
   serverBtn: {
     width: 48,
     height: 48,
     borderRadius: 16,
     border: 0,
-    background: '#2b2d31',
-    color: '#f2f3f5',
+    background: 'var(--bg2)',
+    color: 'var(--text)',
     fontSize: 20,
     display: 'grid',
     placeItems: 'center',
     textDecoration: 'none',
     cursor: 'pointer',
-    transition: 'border-radius .15s, background .15s, transform .15s',
+    flex: 'none',
   },
-  serverBtnOn: { borderRadius: 14, background: '#5865f2' },
-  railSep: { width: 32, height: 2, background: 'rgba(255,255,255,.06)', margin: '4px 0' },
-  sidebar: { width: 240, background: '#2b2d31', display: 'flex', flexDirection: 'column' },
-  sidebarHead: { padding: 16, borderBottom: '1px solid rgba(255,255,255,.06)', fontSize: 15 },
-  channelList: { flex: 1, overflowY: 'auto', padding: 8 },
+  serverBtnOn: { borderRadius: 14, background: 'var(--accent)' },
+  railSep: { width: 32, height: 2, background: 'var(--line)', margin: '4px 0', flex: 'none' },
+  sidebar: {
+    width: 240,
+    flex: 'none',
+    background: 'var(--bg2)',
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  sidebarHead: {
+    padding: '12px 14px',
+    borderBottom: '1px solid var(--line)',
+    fontSize: 15,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flex: 'none',
+  },
+  mobileOnly: {
+    border: 0,
+    background: 'transparent',
+    color: 'var(--text)',
+    fontSize: 18,
+    padding: 4,
+    display: 'none',
+  },
+  channelList: { flex: 1, padding: 8, minHeight: 0 },
   cat: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     fontSize: 11,
     letterSpacing: '0.06em',
-    color: '#949ba4',
+    color: 'var(--mute)',
     padding: '8px 8px 4px',
     fontWeight: 700,
   },
-  plus: { border: 0, background: 'transparent', color: '#949ba4', fontSize: 18, cursor: 'pointer' },
+  plus: { border: 0, background: 'transparent', color: 'var(--mute)', fontSize: 18, cursor: 'pointer' },
   channel: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
     width: '100%',
     textAlign: 'left',
-    padding: '6px 8px',
+    padding: '8px',
     border: 0,
     borderRadius: 4,
     background: 'transparent',
-    color: '#949ba4',
+    color: 'var(--mute)',
     fontSize: 15,
     cursor: 'pointer',
   },
-  channelOn: { background: 'rgba(255,255,255,.06)', color: '#f2f3f5' },
-  userBar: { display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: '#1a1b1e' },
+  channelOn: { background: 'rgba(255,255,255,.06)', color: 'var(--text)' },
+  userBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
+    background: 'var(--bg4)',
+    flex: 'none',
+  },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 50,
-    background: '#5865f2',
+    background: 'var(--accent)',
     display: 'grid',
     placeItems: 'center',
     fontWeight: 700,
     fontSize: 13,
+    flex: 'none',
   },
-  iconBtn: { border: 0, background: 'transparent', color: '#949ba4', fontSize: 16, cursor: 'pointer' },
-  main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#313338' },
+  iconBtn: { border: 0, background: 'transparent', color: 'var(--mute)', fontSize: 16, cursor: 'pointer' },
+  main: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    minHeight: 0,
+    background: 'var(--bg3)',
+    overflow: 'hidden',
+  },
   top: {
     height: 48,
     display: 'flex',
     alignItems: 'center',
-    padding: '0 16px',
-    borderBottom: '1px solid rgba(255,255,255,.06)',
+    gap: 8,
+    padding: '0 12px',
+    borderBottom: '1px solid var(--line)',
+    flex: 'none',
   },
   badge: {
     marginLeft: 'auto',
@@ -440,36 +550,49 @@ const S = {
     background: 'rgba(124,92,255,.25)',
     color: '#c4b5fd',
   },
-  messages: { flex: 1, overflowY: 'auto', padding: '16px 0' },
-  msg: { display: 'flex', gap: 12, padding: '8px 16px' },
+  messages: { flex: 1, padding: '12px 0', minHeight: 0 },
+  msg: { display: 'flex', gap: 12, padding: '8px 12px' },
   msgAvatar: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 50,
     display: 'grid',
     placeItems: 'center',
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: 13,
     flex: 'none',
     color: '#fff',
   },
-  composerWrap: { padding: '0 16px 24px' },
-  composer: { display: 'flex', gap: 8, background: '#2b2d31', borderRadius: 8, padding: 8 },
+  composerWrap: {
+    padding: '0 12px',
+    paddingBottom: 'calc(12px + var(--sab))',
+    flex: 'none',
+  },
+  composer: {
+    display: 'flex',
+    gap: 8,
+    background: 'var(--bg2)',
+    borderRadius: 8,
+    padding: 8,
+    alignItems: 'center',
+  },
   composerInput: {
     flex: 1,
     border: 0,
     background: 'transparent',
-    color: '#f2f3f5',
+    color: 'var(--text)',
     outline: 'none',
     padding: 8,
+    minWidth: 0,
   },
   sendBtn: {
     border: 0,
     borderRadius: 6,
-    padding: '8px 16px',
-    background: '#5865f2',
+    padding: '10px 14px',
+    background: 'var(--accent)',
     color: '#fff',
     fontWeight: 600,
     cursor: 'pointer',
+    flex: 'none',
   },
 };
