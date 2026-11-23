@@ -1,11 +1,6 @@
--- ============================================================
--- Jilowa Chat — FULL schema (run once in Supabase SQL Editor)
--- Same project as AI Gateway Hub is OK
--- ============================================================
-
+-- Jilowa Chat schema — run in Supabase SQL Editor
 create extension if not exists pgcrypto;
 
--- ---------- core chat ----------
 create table if not exists public.chat_servers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -20,8 +15,14 @@ create table if not exists public.chat_channels (
   name text not null,
   topic text default '',
   is_ai boolean default false,
+  type text default 'text', -- text | voice
   created_at timestamptz default now()
 );
+
+-- add type column if table already existed without it
+do $$ begin
+  alter table public.chat_channels add column if not exists type text default 'text';
+exception when others then null; end $$;
 
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
@@ -38,7 +39,33 @@ create table if not exists public.chat_members (
   server_id uuid references public.chat_servers(id) on delete cascade,
   user_id uuid references auth.users(id) on delete cascade,
   role text default 'member',
+  display_name text,
   primary key (server_id, user_id)
+);
+
+do $$ begin
+  alter table public.chat_members add column if not exists display_name text;
+exception when others then null; end $$;
+
+create table if not exists public.chat_roles (
+  id uuid primary key default gen_random_uuid(),
+  server_id uuid references public.chat_servers(id) on delete cascade,
+  name text not null,
+  color text default '#99aab5',
+  position int default 0
+);
+
+create table if not exists public.chat_bots (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references auth.users(id) on delete cascade not null,
+  name text not null,
+  username text not null unique,
+  description text default '',
+  token text not null unique,
+  commands jsonb default '[]'::jsonb,
+  webhook_url text,
+  is_active boolean default true,
+  created_at timestamptz default now()
 );
 
 create table if not exists public.chat_dms (
@@ -65,74 +92,35 @@ create table if not exists public.chat_friends (
   primary key (user_id, friend_id)
 );
 
--- ---------- bots (BotFather tokens) ----------
-create table if not exists public.chat_bots (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid references auth.users(id) on delete cascade not null,
-  name text not null,
-  username text not null,
-  description text default '',
-  token text not null,
-  commands jsonb default '[]'::jsonb,
-  webhook_url text,
-  is_active boolean default true,
-  created_at timestamptz default now()
-);
-
--- unique constraints (safe if re-run)
-do $$ begin
-  alter table public.chat_bots add constraint chat_bots_username_key unique (username);
-exception when duplicate_object then null; end $$;
-do $$ begin
-  alter table public.chat_bots add constraint chat_bots_token_key unique (token);
-exception when duplicate_object then null; end $$;
-
 create index if not exists chat_messages_channel_idx on public.chat_messages (channel_id, created_at desc);
 create index if not exists chat_channels_server_idx on public.chat_channels (server_id);
-create index if not exists chat_dm_messages_idx on public.chat_dm_messages (dm_id, created_at);
-create index if not exists chat_bots_owner_idx on public.chat_bots (owner_id);
 create index if not exists chat_bots_token_idx on public.chat_bots (token);
 
--- ---------- RLS ----------
 alter table public.chat_servers enable row level security;
 alter table public.chat_channels enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.chat_members enable row level security;
+alter table public.chat_roles enable row level security;
+alter table public.chat_bots enable row level security;
 alter table public.chat_dms enable row level security;
 alter table public.chat_dm_messages enable row level security;
 alter table public.chat_friends enable row level security;
-alter table public.chat_bots enable row level security;
 
--- drop old policies if any, recreate
 do $$ declare r record; begin
   for r in select policyname, tablename from pg_policies where schemaname = 'public' and tablename like 'chat_%'
   loop execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
   end loop;
 end $$;
 
-create policy "chat_servers_all" on public.chat_servers for all to authenticated using (true) with check (true);
-create policy "chat_channels_all" on public.chat_channels for all to authenticated using (true) with check (true);
-create policy "chat_messages_all" on public.chat_messages for all to authenticated using (true) with check (true);
-create policy "chat_members_all" on public.chat_members for all to authenticated using (true) with check (true);
-create policy "chat_dms_all" on public.chat_dms for all to authenticated using (true) with check (true);
-create policy "chat_dm_messages_all" on public.chat_dm_messages for all to authenticated using (true) with check (true);
-create policy "chat_friends_all" on public.chat_friends for all to authenticated using (true) with check (true);
+create policy "s_all" on public.chat_servers for all to authenticated using (true) with check (true);
+create policy "c_all" on public.chat_channels for all to authenticated using (true) with check (true);
+create policy "m_all" on public.chat_messages for all to authenticated using (true) with check (true);
+create policy "mem_all" on public.chat_members for all to authenticated using (true) with check (true);
+create policy "roles_all" on public.chat_roles for all to authenticated using (true) with check (true);
+create policy "dms_all" on public.chat_dms for all to authenticated using (true) with check (true);
+create policy "dmm_all" on public.chat_dm_messages for all to authenticated using (true) with check (true);
+create policy "fr_all" on public.chat_friends for all to authenticated using (true) with check (true);
+create policy "bots_own" on public.chat_bots for all to authenticated using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 
--- bots: owner full access; service role bypasses RLS for API by token
-create policy "chat_bots_select_own" on public.chat_bots for select to authenticated using (auth.uid() = owner_id);
-create policy "chat_bots_insert_own" on public.chat_bots for insert to authenticated with check (auth.uid() = owner_id);
-create policy "chat_bots_update_own" on public.chat_bots for update to authenticated using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
-create policy "chat_bots_delete_own" on public.chat_bots for delete to authenticated using (auth.uid() = owner_id);
-
--- ---------- Realtime ----------
-do $$ begin
-  alter publication supabase_realtime add table public.chat_messages;
+do $$ begin alter publication supabase_realtime add table public.chat_messages;
 exception when others then null; end $$;
-do $$ begin
-  alter publication supabase_realtime add table public.chat_dm_messages;
-exception when others then null; end $$;
-
--- Grant usage (anon cannot read bots; authenticated can own rows)
-grant usage on schema public to authenticated, anon, service_role;
-grant all on all tables in schema public to authenticated, service_role;
-grant all on all sequences in schema public to authenticated, service_role;
